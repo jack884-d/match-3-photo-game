@@ -112,12 +112,14 @@
       }finally{ busy=false; }
     }
     async function settle(){
-      let chain=0, matches=findMatches();
-      while(matches.length){ chain++; playClearSound(chain); matches.forEach(([r,c])=>boardEl.children[index(r,c)]?.classList.add('removing')); score+=matches.length*10*chain; scoreEl.textContent=score; messageEl.textContent=chain>1?`连击 × ${chain}！`:`消除 ${matches.length} 个！`; await sleep(290);
-        const marked=new Set(matches.map(([r,c])=>`${r},${c}`));
-        for(let c=0;c<COLS;c++){ const kept=[]; for(let r=ROWS-1;r>=0;r--) if(!marked.has(`${r},${c}`)) kept.push(board[r][c]); while(kept.length<ROWS) kept.push(Math.floor(Math.random()*3)); for(let r=ROWS-1,i=0;r>=0;r--,i++) board[r][c]=kept[i]; }
-        render(); await sleep(190); matches=findMatches();
-      }
+      const matches=findMatches();
+      if(!matches.length)return;
+      playClearSound(); matches.forEach(([r,c])=>boardEl.children[index(r,c)]?.classList.add('removing')); score+=matches.length*10; scoreEl.textContent=score; messageEl.textContent=`消除 ${matches.length} 个！`; await sleep(290);
+      const marked=new Set(matches.map(([r,c])=>`${r},${c}`));
+      for(let c=0;c<COLS;c++){ const kept=[]; for(let r=ROWS-1;r>=0;r--) if(!marked.has(`${r},${c}`)) kept.push(board[r][c]); while(kept.length<ROWS) kept.push(Math.floor(Math.random()*3)); for(let r=ROWS-1,i=0;r>=0;r--,i++) board[r][c]=kept[i]; }
+      for(let tries=0,extra=findMatches();extra.length&&tries<100;tries++,extra=findMatches()) extra.forEach(([r,c])=>board[r][c]=Math.floor(Math.random()*3));
+      if(findMatches().length)makeBoard();
+      render(); await sleep(190);
     }
     function getHint(){
       for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)for(const [dr,dc] of [[0,1],[1,0]]){ const b={r:r+dr,c:c+dc}; if(b.r>=ROWS||b.c>=COLS)continue; const a={r,c}; swap(a,b); const ok=findMatches().length; swap(a,b); if(ok)return[a,b]; }
