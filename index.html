@@ -68,6 +68,7 @@
     const ROWS=8, COLS=8;
     const boardEl=document.querySelector('#board'), scoreEl=document.querySelector('#score'), movesEl=document.querySelector('#moves'), timeEl=document.querySelector('#time'), messageEl=document.querySelector('#message');
     let board=[], selected=null, score=0, moves=30, time=60, busy=false, ended=false, timer;
+    let audioCtx;
     const sleep=ms=>new Promise(r=>setTimeout(r,ms));
     const index=(r,c)=>r*COLS+c;
     const near=(a,b)=>Math.abs(a.r-b.r)+Math.abs(a.c-b.c)===1;
@@ -82,8 +83,14 @@
       boardEl.innerHTML='';
       board.forEach((row,r)=>row.forEach((type,c)=>{
         const b=document.createElement('button'); b.className=`tile t${type}`; b.dataset.r=r; b.dataset.c=c; b.setAttribute('aria-label',`第${r+1}行第${c+1}列`);
-        b.innerHTML=`<img src="${IMAGES[type]}" alt="图案 ${type+1}">`; b.addEventListener('click',clickTile); boardEl.appendChild(b);
+        b.innerHTML=`<img src="${IMAGES[type]}" alt="图案 ${type+1}">`; boardEl.appendChild(b);
       }));
+    }
+    function playClearSound(chain=1){
+      audioCtx??=new (window.AudioContext||window.webkitAudioContext)();
+      if(audioCtx.state==='suspended')audioCtx.resume();
+      const now=audioCtx.currentTime;
+      [0,1,2].forEach((step,i)=>{ const osc=audioCtx.createOscillator(),gain=audioCtx.createGain(); osc.type='sine';osc.frequency.setValueAtTime(440+chain*55+step*110,now+i*.055);gain.gain.setValueAtTime(.12,now+i*.055);gain.gain.exponentialRampToValueAtTime(.001,now+i*.055+.16);osc.connect(gain).connect(audioCtx.destination);osc.start(now+i*.055);osc.stop(now+i*.055+.16); });
     }
     function findMatches(){
       const set=new Set();
@@ -97,13 +104,16 @@
       if(!selected){ selected=pos; e.currentTarget.classList.add('selected'); messageEl.textContent='再选择一个相邻头像'; return; }
       if(selected.r===pos.r&&selected.c===pos.c){ selected=null; render(); return; }
       if(!near(selected,pos)){ selected=pos; render(); boardEl.children[index(pos.r,pos.c)].classList.add('selected'); messageEl.textContent='要选择紧挨着的头像哦'; return; }
-      busy=true; const first=selected; selected=null; swap(first,pos); render(); await sleep(160);
-      if(!findMatches().length){ swap(first,pos); render(); messageEl.textContent='这一步不能形成三连'; await sleep(180); busy=false; return; }
-      moves--; movesEl.textContent=moves; await settle(); busy=false; if(moves<=0) finish();
+      busy=true; const first=selected; selected=null;
+      try{
+        swap(first,pos); render(); await sleep(160);
+        if(!findMatches().length){ swap(first,pos); render(); messageEl.textContent='这一步不能形成三连'; await sleep(180); return; }
+        moves--; movesEl.textContent=moves; await settle(); if(moves<=0) finish();
+      }finally{ busy=false; }
     }
     async function settle(){
       let chain=0, matches=findMatches();
-      while(matches.length){ chain++; matches.forEach(([r,c])=>boardEl.children[index(r,c)]?.classList.add('removing')); score+=matches.length*10*chain; scoreEl.textContent=score; messageEl.textContent=chain>1?`连击 × ${chain}！`:`消除 ${matches.length} 个！`; await sleep(290);
+      while(matches.length){ chain++; playClearSound(chain); matches.forEach(([r,c])=>boardEl.children[index(r,c)]?.classList.add('removing')); score+=matches.length*10*chain; scoreEl.textContent=score; messageEl.textContent=chain>1?`连击 × ${chain}！`:`消除 ${matches.length} 个！`; await sleep(290);
         const marked=new Set(matches.map(([r,c])=>`${r},${c}`));
         for(let c=0;c<COLS;c++){ const kept=[]; for(let r=ROWS-1;r>=0;r--) if(!marked.has(`${r},${c}`)) kept.push(board[r][c]); while(kept.length<ROWS) kept.push(Math.floor(Math.random()*3)); for(let r=ROWS-1,i=0;r>=0;r--,i++) board[r][c]=kept[i]; }
         render(); await sleep(190); matches=findMatches();
@@ -116,6 +126,7 @@
     function showHint(){ if(busy||ended)return; const pair=getHint(); if(!pair){ makeBoard(); render(); messageEl.textContent='棋盘已重新排列'; return; } pair.forEach(p=>boardEl.children[index(p.r,p.c)].classList.add('hint')); messageEl.textContent='试试交换闪烁的两个头像'; }
     function start(){ clearInterval(timer); score=0;moves=30;time=60;selected=null;busy=false;ended=false; scoreEl.textContent=0;movesEl.textContent=30;timeEl.textContent=60;document.querySelector('#overlay').classList.remove('show');messageEl.textContent='点击一个头像，再点击它旁边的头像';makeBoard();render(); timer=setInterval(()=>{ if(busy||ended)return; time--;timeEl.textContent=time;if(time<=0)finish(); },1000); }
     function finish(){ if(ended)return; ended=true;clearInterval(timer);document.querySelector('#resultTitle').textContent=score>=1000?'太厉害了！':'游戏结束';document.querySelector('#resultText').textContent=`最终得分：${score} 分`;document.querySelector('#overlay').classList.add('show'); }
+    boardEl.addEventListener('click',e=>{ const tile=e.target.closest('.tile'); if(tile&&boardEl.contains(tile))clickTile({currentTarget:tile}); });
     document.querySelector('#hint').addEventListener('click',showHint);document.querySelector('#restart').addEventListener('click',start);document.querySelector('#again').addEventListener('click',start);start();
   </script>
 </body>
